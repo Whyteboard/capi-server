@@ -2,7 +2,9 @@ import express from "express";
 import crypto from "crypto";
 
 const app = express();
-app.use(express.json());
+
+// ✅ IMPORTANT: accept raw body (prevents crash)
+app.use(express.text({ type: "*/*" }));
 
 const PIXEL_ID = process.env.PIXEL_ID;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
@@ -17,12 +19,22 @@ app.get("/", (req, res) => {
 
 app.post("/webhook", async (req, res) => {
   try {
-    console.log("Webhook hit");
+    console.log("Webhook received");
 
-    const payment = req.body?.payload?.payment?.entity;
+    let body;
+
+    // ✅ SAFE PARSE
+    try {
+      body = JSON.parse(req.body);
+    } catch (e) {
+      console.log("JSON parse failed");
+      return res.status(400).send("Invalid JSON");
+    }
+
+    const payment = body?.payload?.payment?.entity;
 
     if (!payment) {
-      console.log("Invalid payload:", req.body);
+      console.log("No payment object:", body);
       return res.status(400).send("Invalid payload");
     }
 
@@ -49,15 +61,13 @@ app.post("/webhook", async (req, res) => {
       access_token: ACCESS_TOKEN
     };
 
-    console.log("Sending to Meta");
+    console.log("Sending to Meta...");
 
     const response = await fetch(
       `https://graph.facebook.com/v19.0/${PIXEL_ID}/events`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       }
     );
@@ -67,13 +77,13 @@ app.post("/webhook", async (req, res) => {
 
     res.status(200).send("OK");
 
-  } catch (error) {
-    console.error("CRASH ERROR:", error);
+  } catch (err) {
+    console.error("CRASH:", err);
     res.status(500).send("Server error");
   }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log("Running on", PORT);
 });
