@@ -1,14 +1,15 @@
 import express from "express";
 import crypto from "crypto";
+import fetch from "node-fetch";
 
 const app = express();
 app.use(express.json());
 
-// Use environment variables (SET THESE IN RAILWAY)
+// SET THESE IN RAILWAY VARIABLES
 const PIXEL_ID = process.env.PIXEL_ID;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 
-// Hash function
+// SHA256 hashing
 function sha256(data) {
   return crypto.createHash("sha256").update(data).digest("hex");
 }
@@ -28,23 +29,19 @@ app.post("/webhook", async (req, res) => {
       return res.status(400).send("Invalid payload");
     }
 
-    // Extract user + payment data
+    // Extract data
     const email = (payment.email || "").toLowerCase().trim();
     const phone = (payment.contact || "").replace(/\D/g, "");
     const amount = (payment.amount || 0) / 100;
 
-    // Multi-page + campaign tracking (via Razorpay notes)
+    const event_id = payment.id || crypto.randomUUID();
+
+    // Optional tracking (if passed via Razorpay notes)
     const source_url =
       payment.notes?.source_url || "https://yourwebsite.com";
     const fbp = payment.notes?.fbp || undefined;
     const fbc = payment.notes?.fbc || undefined;
 
-    const product_name = payment.notes?.product_name || "Product";
-    const product_id = payment.notes?.product_id || "default-id";
-
-    const event_id = payment.id || crypto.randomUUID();
-
-    // Meta payload
     const payload = {
       data: [
         {
@@ -63,18 +60,15 @@ app.post("/webhook", async (req, res) => {
 
           custom_data: {
             currency: "INR",
-            value: amount,
-            content_name: product_name,
-            content_ids: [product_id]
+            value: amount
           }
         }
       ],
       access_token: ACCESS_TOKEN
     };
 
-    console.log("Sending to Meta:", payload);
+    console.log("Sending to Meta...");
 
-    // Send to Meta
     const response = await fetch(
       `https://graph.facebook.com/v19.0/${PIXEL_ID}/events`,
       {
@@ -89,7 +83,7 @@ app.post("/webhook", async (req, res) => {
     const result = await response.json();
     console.log("META RESPONSE:", result);
 
-    res.send("Event sent to Meta ✅");
+    res.send("Event sent ✅");
 
   } catch (error) {
     console.error("ERROR:", error);
@@ -97,7 +91,7 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-// Railway port setup
+// Required for Railway
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
